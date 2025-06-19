@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Cadastro Realizado com Sucesso</title>
+  <!-- Redireciona para a página principal (/) após 5 segundos -->
+  <meta http-equiv="refresh" content="5;url=/" />
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: #009640;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .mensagem {
+      background-color: #fff;
+      padding: 40px 50px;
+      border-radius: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+    .mensagem h1 {
+      color: #2c7be5;
+      font-size: 3rem;
+      margin-bottom: 20px;
+    }
+    .mensagem p {
+      font-size: 1.5rem;
+      line-height: 1.4;
+      margin-bottom: 10px;
+    }
+    @media (max-width: 600px) {
+      .mensagem {
+        padding: 30px 20px;
+      }
+      .mensagem h1 {
+        font-size: 2.5rem;
+      }
+      .mensagem p {
+        font-size: 1.3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="mensagem">
+    <h1>Enviado Com Sucesso!</h1>
+    <p>{{ mensagem }}</p>
+    <p>A página será recarregada para o formulário principal em 5 segundos, aguarde!</p>
+  </div>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8" />
+    <title>Página Admin - Registros</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #009640;
+        }
+        header {
+            position: relative; 
+            display: flex;
+            align-items: center;
+            justify-content: center; 
+            margin-bottom: 40px;
+            padding: 10px 0;
+        }
+        header img {
+            position: absolute;
+            left: 20px; 
+            max-width: 200px;
+            height: auto;
+        }
+        header h1 {
+            text-align: center;
+            font-size: 3rem;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: #fff;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            border-bottom: 2px solid #fff;
+            margin: 0;
+            padding: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            box-shadow: 0 0 5px rgba(0,0,0,0.1);
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            font-size: 14px;
+            text-align: left;
+        }
+        th {
+            background-color: #2c3e50;
+            color: white;
+            position: sticky;
+            top: 0;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .btn-export {
+            margin-bottom: 15px;
+            padding: 10px 18px;
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 15px;
+            transition: background-color 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-export:hover {
+            background-color: #1f6391;
+        }
+        .container {
+            max-width: 100%;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header com logo à esquerda e título centralizado -->
+    <header>
+        <img src="{{ url_for('static', filename='images/LOGO_NEOENERGIA_PE.png') }}" alt="Logo Neoenergia Pernambuco">
+        <h1>REGISTROS CADASTRADOS</h1>
+    </header>
+    
+    <a href="{{ url_for('exportar_excel') }}" class="btn-export">Exportar Excel</a>
+    <div class="container">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Data e Hora</th>
+                    <th>Cidade</th>
+                    <th>Logradouro</th>
+                    <th>Número</th>
+                    <th>Bairro</th>
+                    <th>Barramento</th>
+                    <th>Ocupante</th>
+                    <th>Nível Fixação</th>
+                    <th>Tipo Cabo</th>
+                    <th>Equipamento</th>
+                    <th>Placa Identificação</th>
+                    <th>Irregularidades</th>
+                    <th>Fotos Ocupante</th>
+                    <th>Fotos Poste</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                    <th>UTM X</th>
+                    <th>UTM Y</th>
+                    <th>Zona UTM Número</th>
+                    <th>Zona UTM Letra</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in registros %}
+                <tr>
+                    <td>{{ reg.id }}</td>
+                    <td>{{ reg.data_hora.strftime('%Y-%m-%d %H:%M:%S') if reg.data_hora else '' }}</td>
+                    <td>{{ reg.cidade }}</td>
+                    <td>{{ reg.logradouro }}</td>
+                    <td>{{ reg.numero }}</td>
+                    <td>{{ reg.bairro }}</td>
+                    <td>{{ reg.barramento }}</td>
+                    <td>{{ reg.ocupante }}</td>
+                    <td>{{ reg.nivel_fixacao }}</td>
+                    <td>{{ reg.tipo_cabo }}</td>
+                    <td>{{ reg.equipamento }}</td>
+                    <td>{{ reg.placa_identificacao }}</td>
+                    <td>{{ reg.irregularidades }}</td>
+                    <td>
+                        {% if reg.foto_ocupante_path %}
+                            {% for foto in reg.foto_ocupante_path.split(';') %}
+                                <a href="{{ '/' + foto }}" target="_blank">Foto</a><br>
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if reg.foto_poste_path %}
+                            {% for foto in reg.foto_poste_path.split(';') %}
+                                <a href="{{ '/' + foto }}" target="_blank">Foto</a><br>
+                            {% endfor %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ reg.latitude }}</td>
+                    <td>{{ reg.longitude }}</td>
+                    <td>{{ reg.utm_x }}</td>
+                    <td>{{ reg.utm_y }}</td>
+                    <td>{{ reg.utm_zone_number }}</td>
+                    <td>{{ reg.utm_zone_letter }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="21" style="text-align:center;">Nenhum registro encontrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
