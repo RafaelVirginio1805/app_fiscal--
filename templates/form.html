@@ -368,5 +368,78 @@ function verificarOutra2(count, tipo) {
     }
 }
 </script>
+<script>
+// IndexedDB setup
+let db;
+const request = indexedDB.open("FormDB", 1);
+
+request.onerror = (event) => console.error("Erro ao abrir IndexedDB", event);
+request.onsuccess = (event) => db = event.target.result;
+request.onupgradeneeded = (event) => {
+  db = event.target.result;
+  db.createObjectStore("formularios", { autoIncrement: true });
+};
+
+function salvarOffline(dados) {
+  const tx = db.transaction("formularios", "readwrite");
+  const store = tx.objectStore("formularios");
+  store.add(dados);
+  tx.oncomplete = () => console.log("Formulário salvo localmente.");
+}
+
+async function sincronizarFormularios() {
+  const tx = db.transaction("formularios", "readwrite");
+  const store = tx.objectStore("formularios");
+  const getAll = store.getAll();
+  getAll.onsuccess = async () => {
+    const formularios = getAll.result;
+    for (const dados of formularios) {
+      try {
+        const formData = new FormData();
+        Object.entries(dados).forEach(([key, value]) => {
+          if (Array.isArray(value)) {
+            value.forEach((val) => formData.append(key, val));
+          } else {
+            formData.append(key, value);
+          }
+        });
+
+        await fetch("/enviar", {
+          method: "POST",
+          body: formData,
+        });
+        store.delete(dados.id);
+        console.log("Formulário sincronizado com sucesso");
+      } catch (e) {
+        console.error("Erro ao sincronizar", e);
+      }
+    }
+  };
+}
+
+window.addEventListener("online", sincronizarFormularios);
+
+// Interceptar envio do formulário
+const form = document.querySelector("form");
+form.addEventListener("submit", (e) => {
+  if (!navigator.onLine) {
+    e.preventDefault();
+    const dados = {};
+    const formElements = form.elements;
+    for (const el of formElements) {
+      if (!el.name) continue;
+      if (el.type === "file") {
+        dados[el.name] = Array.from(el.files);
+      } else if (el.multiple) {
+        dados[el.name] = Array.from(el.selectedOptions || []).map(opt => opt.value);
+      } else {
+        dados[el.name] = el.value;
+      }
+    }
+    salvarOffline(dados);
+    alert("Sem internet. Formulário salvo no dispositivo e será enviado automaticamente quando estiver online.");
+  }
+});
+</script>
 </body>
 </html>
