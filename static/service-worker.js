@@ -1,10 +1,6 @@
 const CACHE_NAME = "app-cache-v2";
 const URLS_TO_CACHE = [
     "/",
-    "/static/css/style.css",
-    "/static/js/script.js",
-    "/static/icons/icon-192.png",
-    "/static/icons/icon-512.png",
     // adicione aqui todos os arquivos que seu app precisa offline
 ];
 
