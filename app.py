@@ -8,6 +8,9 @@ from datetime import datetime
 from PIL import Image
 import utm
 import io
+import unicodedata
+import re
+import openpyxl
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'uploads'
@@ -62,6 +65,58 @@ def carregar_irregularidades():
         df = pd.read_csv(CSV_IRREGULARIDADES, encoding='ISO-8859-1')
     return sorted(set(df['IRREGULARIDADES'].dropna().str.strip().str.title()))
 
+def normalizar_nome(nome):
+    nome = unicodedata.normalize('NFKD', nome).encode('ASCII', 'ignore').decode('ASCII')
+    nome = re.sub(r'[^a-zA-Z0-9]', '_', nome)
+    nome = re.sub(r'_+', '_', nome).strip('_').lower()
+    return nome
+
+def limpar_texto(texto):
+    if not texto:
+        return ''
+    texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode('utf-8')
+    texto = re.sub(r'[^\w\s]', '', texto)  
+    texto = texto.upper()
+    return texto.strip()
+
+def salvar_foto(file, latitude='', longitude='', ocupante=''):
+    if file:
+        # Normalizar coordenadas (substituir vírgulas por pontos)
+        lat_str = str(latitude).strip().replace(',', '.')
+        lon_str = str(longitude).strip().replace(',', '.')
+        ocupante_norm = normalizar_nome(ocupante or 'ocupante')
+
+        # Timestamp reduzido (YYMMDD_HHMMSS)
+        timestamp = datetime.now().strftime('%y%m%d_%H%M%S')
+
+        # Criar nome do arquivo
+        filename = f"{lat_str}_{lon_str}_{ocupante_norm}_{timestamp}.jpg"
+        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+        try:
+            img = Image.open(file)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            try:
+                resample_method = Image.Resampling.LANCZOS
+            except AttributeError:
+                resample_method = Image.LANCZOS
+
+            max_width = 1280
+            if img.width > max_width:
+                ratio = max_width / float(img.width)
+                new_height = int((float(img.height) * ratio))
+                img = img.resize((max_width, new_height), resample=resample_method)
+
+            img.save(path, "JPEG", optimize=True, quality=70)
+        except Exception as e:
+            print("Erro ao comprimir imagem no backend:", e)
+            file.save(path)
+
+        return os.path.basename(path)
+    return ''
+
 @app.route('/')
 def index():
     cidades_dict = carregar_cidades()
@@ -78,10 +133,10 @@ def index():
 def enviar():
     try:
         cidade = request.form.get('cidade')
-        logradouro = request.form.get('logradouro')
+        logradouro = limpar_texto(request.form.get('logradouro'))
         numero = request.form.get('numero')
         bairro = request.form.get('bairro')
-        barramento = request.form.get('barramento', '')
+        barramento = limpar_texto(request.form.get('barramento', ''))
 
         latitude = request.form.get('latitude')
         longitude = request.form.get('longitude')
@@ -96,9 +151,12 @@ def enviar():
             except Exception as e:
                 print("Erro ao converter coordenadas UTM:", e)
 
-        # ✅ Recupera os nomes das fotos do poste via campo enviado como array
-        poste_ids = request.form.getlist('foto_poste_ids[]')
-        fotos_poste_str = ';'.join(poste_ids)
+        # Fotos do poste
+        fotos_poste = request.files.getlist('foto_poste[]')
+        fotos_poste_nomes = [
+            salvar_foto(file, latitude, longitude, 'poste') for file in fotos_poste if file
+        ]
+        fotos_poste_str = ';'.join(fotos_poste_nomes)
 
         index = 0
         ocupantes_validos = 0
@@ -108,26 +166,26 @@ def enviar():
             if key not in request.form:
                 break
 
-            ocupante = request.form.get(f'ocupante_nome_{index}')
+            ocupante = limpar_texto(request.form.get(f'ocupante_nome_{index}', ''))
             if not ocupante:
                 index += 1
                 continue
 
-            nivel = request.form.get(f'nivel_fixacao_{index}')
+            nivel = limpar_texto(request.form.get(f'nivel_fixacao_{index}'))
             tipo_cabo = request.form.getlist(f'tipo_cabo_{index}[]')
             equipamento = request.form.getlist(f'equipamento_{index}[]')
-            placa = request.form.get(f'placa_identificacao_{index}')
+            placa = limpar_texto(request.form.get(f'placa_identificacao_{index}', ''))
             irregularidades = request.form.getlist(f'irregularidades_{index}[]')
 
-            tipo_cabo_outro = request.form.get(f'tipo_cabo_outro_{index}', '').strip()
+            tipo_cabo_outro = limpar_texto(request.form.get(f'tipo_cabo_outro_{index}', '').strip())
             if tipo_cabo_outro:
                 tipo_cabo.append(tipo_cabo_outro)
 
-            equipamento_outro = request.form.get(f'equipamento_outro_{index}', '').strip()
+            equipamento_outro = limpar_texto(request.form.get(f'equipamento_outro_{index}', '').strip())
             if equipamento_outro:
                 equipamento.append(equipamento_outro)
 
-            irregularidades_outro = request.form.get(f'irregularidades_outro_{index}', '').strip()
+            irregularidades_outro = limpar_texto(request.form.get(f'irregularidades_outro_{index}', '').strip())
             if irregularidades_outro:
                 irregularidades.append(irregularidades_outro)
 
@@ -135,9 +193,11 @@ def enviar():
             equipamento_str = ", ".join(equipamento)
             irregularidades_str = ", ".join(irregularidades)
 
-            # ✅ Recupera os nomes das fotos dos ocupantes enviados como array
-            ocupante_ids = request.form.getlist(f'foto_ocupante_ids_{index}[]')
-            fotos_ocupante_str = ';'.join(ocupante_ids)
+            ocupante_fotos = request.files.getlist(f'foto_ocupante_{index}[]')
+            fotos_ocupante_nomes = [
+                salvar_foto(file, latitude, longitude, ocupante) for file in ocupante_fotos if file
+            ]
+            fotos_ocupante_str = ';'.join(fotos_ocupante_nomes)
 
             salvar_no_banco(
                 cidade, logradouro, numero, bairro, barramento, ocupante,
@@ -154,54 +214,6 @@ def enviar():
     except Exception as e:
         print("Erro ao enviar dados:", e)
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
-
-def salvar_foto(file, prefix):
-    if file:
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-        filename = f"{prefix}_{timestamp}.jpg"
-        path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-
-        try:
-            img = Image.open(file)
-
-            # Converter para RGB se for PNG ou outros formatos
-            if img.mode in ("RGBA", "P"):
-                img = img.convert("RGB")
-
-            # Definir método de redimensionamento com fallback
-            try:
-                resample_method = Image.Resampling.LANCZOS  # Pillow >= 10
-            except AttributeError:
-                resample_method = Image.LANCZOS  # Pillow < 10
-
-            max_width = 1280
-            if img.width > max_width:
-                ratio = max_width / float(img.width)
-                new_height = int((float(img.height) * ratio))
-                img = img.resize((max_width, new_height), resample=resample_method)
-
-            img.save(path, "JPEG", optimize=True, quality=70)
-
-        except Exception as e:
-            print("Erro ao comprimir imagem no backend:", e)
-            file.save(path)  # fallback: salvar original
-
-        return path
-    return ''
-
-@app.route('/upload_photo', methods=['POST'])
-def upload_photo():
-    file = request.files.get('photo')
-    campo = request.form.get('campo')
-    ocupante_id = request.form.get('ocupante_id')
-
-    if file:
-        path = salvar_foto(file, prefix=campo)
-        photo_id = os.path.basename(path)  # Exemplo: nome do arquivo
-        return jsonify({ 'status': 'ok', 'photo_id': photo_id })
-
-    return jsonify({ 'status': 'erro' })
-
 
 def salvar_no_banco(cidade, logradouro, numero, bairro, barramento, ocupante,
                     nivel, tipo_cabo, equipamento, placa,
@@ -266,6 +278,7 @@ def admin():
 @app.route('/exportar_excel')
 def exportar_excel():
     try:
+        # Conectar e buscar dados do banco
         conexao = pymysql.connect(
             host='localhost',
             user='root',
@@ -280,15 +293,35 @@ def exportar_excel():
 
         df = pd.DataFrame(registros)
 
+        contratos_path = 'data/PROVEDORES.xlsx'
+        if os.path.exists(contratos_path):
+            contratos_df = pd.read_excel(contratos_path)
+            # Deixar nome padronizado
+            contratos_df['provedor'] = contratos_df['provedor'].astype(str).str.upper().str.strip()
+            # Criar um set para consulta rápida
+            set_contratados = set(contratos_df['provedor'])
+        else:
+            set_contratados = set()
+
+        df['ocupante_normalizado'] = df['ocupante'].astype(str).str.upper().str.strip()
+
+        # Cria coluna 'clandestino': "Não" se estiver na planilha, "Sim" caso não esteja
+        df['clandestino'] = df['ocupante_normalizado'].apply(lambda x: "Não" if x in set_contratados else "Sim")
+
+        df.drop(columns=['ocupante_normalizado'], inplace=True)
+
         output = io.BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Registros')
         output.seek(0)
 
-        return send_file(output,
-                        download_name='registros.xlsx',
-                        as_attachment=True,
-                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        return send_file(
+            output,
+            download_name='registros.xlsx',
+            as_attachment=True,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
     except Exception as e:
         return f"Erro ao exportar Excel: {e}"
 
